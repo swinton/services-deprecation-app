@@ -203,13 +203,15 @@ post "/" do
   begin
     result = {repo_list: []}
 
+    @client.auto_paginate = true
     response = @client.find_installation_repositories_for_user(installation_id)
+
     app_token = get_app_token(installation_id)
     @app_client = Octokit::Client.new(:access_token => app_token)
+    @app_client.auto_paginate = true
 
     if response.total_count > 0
       response.repositories.each do |repo|
-        puts "getting hooks for #{repo["full_name"]}"
         hook_list = get_hook_list(params[:installation_id], repo["full_name"], @app_client)
 
         if !hook_list.nil? && hook_list.count > 0
