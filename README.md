@@ -1,4 +1,4 @@
-# GitHub Contribution Checker App
+# GitHub Services Deprecation Checker App
 
 On April 25, 2018, Github announced it plans on [shutting down GitHub Services](https://developer.github.com/v3/guides/replacing-github-services/). This application can help identify how and where your Accounts are [using GitHub Services](https://developer.github.com/v3/guides/replacing-github-services/#migrating-with-our-help).
 
