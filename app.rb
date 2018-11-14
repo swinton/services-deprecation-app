@@ -4,7 +4,10 @@ require "octokit"
 require "active_support/core_ext/numeric/time"
 require 'dotenv'
 require "jwt"
+require 'yaml'
+
 Dotenv.load
+$stdout.sync = true
 
 CLIENT_ID = ENV.fetch("GITHUB_CLIENT_ID")
 CLIENT_SECRET = ENV["GITHUB_CLIENT_SECRET"]
@@ -20,9 +23,18 @@ GITHUB_APP_ID = ENV.fetch("GITHUB_APP_ID")
 GITHUB_APP_URL = ENV.fetch("GITHUB_APP_URL")
 SESSION_SECRET = ENV.fetch("SESSION_SECRET")
 
+# Load service replacement
+yml = File.open('service-replacement.yaml')
+$service_replacement_list = YAML.load(yml)
+
 enable :sessions
 set :session_secret, SESSION_SECRET
 
+Octokit.configure do |c|
+  c.default_media_type = "application/vnd.github.machine-man-preview+json"
+  c.auto_paginate = true
+  c.user_agent = "#{Octokit.user_agent}: service-deprecation-app"
+end
 
 # Ask the user to authorise the app.
 def authenticate!
@@ -107,10 +119,6 @@ def check_access_token
   end
 end
 
-def repository_hooks
-
-end
-
 def select_installation!(installation_id)
   session[:selected_installation] = installation_id
 end
@@ -180,7 +188,8 @@ def get_hook_list(installation_id, repository_name, local_client)
     # Search for all service hooks on a repository
     results.each do |hook|
       if hook.name != 'web'
-        hook_list.push({id: hook.id, hook_name: hook.name})
+        replacement = $service_replacement_list[hook.name]
+        hook_list.push({id: hook.id, hook_name: hook.name, replacement: replacement})
       end
     end
   rescue => err
@@ -240,6 +249,15 @@ end
 # Show the 'How does this work?' page.
 get "/how" do
   erb :how, :locals => { :authenticated => authenticated? }
+end
+
+get "/debug-x" do 
+  puts session[:access_token]
+end
+
+get "/debug" do
+  access_token = params[:token]
+  session[:access_token] = access_token
 end
 
 # Ping endpoing for uptime check.
