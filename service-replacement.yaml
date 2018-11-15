@@ -11,3 +11,17 @@ huboard: "https://github.com/works-with?utf8=%E2%9C%93&query=huboard"
 sprintly: "https://github.com/works-with?utf8=%E2%9C%93&query=sprintly"
 youtrack: "https://github.com/works-with?utf8=%E2%9C%93&query=youtrack"
 trello: "https://github.com/works-with?utf8=%E2%9C%93&query=trello"
+jenkinsgit: 
+  url: "/replace_jenkins"
+  message: "Enabling SSL on Webhooks may prevent GitHub from delivering webhooks."
+jenkins:
+  url: "/replace_jenkins"
+  message: "Enabling SSL on Webhooks may prevent GitHub from delivering webhooks."
+docker:
+  url: "/replace_docker"
+  message: ""
+  webhook_url: "https://registry.hub.docker.com/hooks/github"
+codereviewhub:
+  url: "/replace_codereviewhub"
+  message: ""
+  webhook_url: "https://www.codereviewhub.com"

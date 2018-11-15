@@ -139,20 +139,6 @@ def installations
   @client.find_user_installations[:installations]
 end
 
-# Get the user's recent commits from their public activity feed.
-def recent_commits
-
-  return "" if !installation_selected?
-
-  installation_id = session[:selected_installation]
-  # installation_token = get_app_token(installation_id)
-
-  @client = Octokit::Client.new(:access_token => session[:access_token])
-  response = @client.find_installation_repositories_for_user(installation_id)
-
-  commits = response[:repositories]
-  commits.take 15
-end
 
 # Wrapper route for redirecting the user to authorise the app.
 get "/auth" do
@@ -174,8 +160,67 @@ get "/" do
     return erb :install, :locals => { :authenticated => authenticated?, :installed => installed?}
   else
     erb :index, :locals => {
-      :authenticated => authenticated?, :recent_commits => recent_commits, :installations => installations, :installation_selected => installation_selected?}
+      :authenticated => authenticated?,  :installations => installations, :installation_selected => installation_selected?}
   end
+end
+
+def replace_hook(installation_id, repository_name, hook_id)
+
+  app_token = get_app_token(installation_id)
+  return 404 unless app_token != ''
+  @app_client = Octokit::Client.new(:access_token => app_token)
+
+  # Get old hooks 
+  result = @app_client.hook(repository_name, hook_id, :accept => "application/vnd.github.machine-man-preview+json")
+  params = ""
+  events = ['push']
+  if result.name == "jenkinsgit"
+    url = result.config.jenkins_url
+    # TODO: Look up repository URL to support GitHub Enterprise
+    params = "/git/notifyCommit?url=http://github.com/#{repository_name}"
+    hook_data = {:jenkins_url => jenkins_url}
+  elsif result.name == "jenkins"
+    url = result.config.jenkins_hook_url
+    hook_data = {:jenkins_hook_url => jenkins_url}
+  elsif result.name == "docker"
+    url = "https://registry.hub.docker.com/hooks/github"
+    hook_data = {}
+  elsif result.name == "codereviewhub"
+    url = "https://www.codereviewhub.com"
+    hook_data = {}
+    events = ['push', "pull_request", "issue_comment", "commit_comment", "pull_request_review_comment"]
+  else
+    puts "unknown error"
+    return nil
+  end
+
+  # Add repo webhook for `push` events
+  begin
+    create_result = @app_client.create_hook(repository_name, 'web',
+      {
+        :url => "#{url}#{params}",
+        :content_type => 'json'
+      },
+      {
+        :events => events,
+        :active => true
+      }
+    )
+  rescue => e
+    puts e
+    return 400
+  end
+
+  # Disable old Service Hook if webhook creation succeeded
+  begin
+    result = @app_client.edit_hook(repository_name, hook_id, 'jenkinsgit', hook_data, {
+      :active => false
+    })
+  rescue => e
+    puts e
+    return 400
+  end
+  return 201
 end
 
 # Return a all the Service hooks installed on a Repository
@@ -187,9 +232,17 @@ def get_hook_list(installation_id, repository_name, local_client)
 
     # Search for all service hooks on a repository
     results.each do |hook|
-      if hook.name != 'web'
+      if (hook.name == 'jenkinsgit' || hook.name == 'codereviewhub') && hook.active 
         replacement = $service_replacement_list[hook.name]
-        hook_list.push({id: hook.id, hook_name: hook.name, replacement: replacement})
+        hook_list.push({id: hook.id, hook_name: hook.name, replacement: "#{replacement['url']}?repo_name=#{repository_name}&hook_id=#{hook.id}&installation_id=#{installation_id}", message: replacement['message']})
+      elsif hook.name == 'jenkins' && hook.active        
+        replacement = $service_replacement_list[hook.name]
+        hook_list.push({id: hook.id, hook_name: hook.name, replacement: "#{replacement['url']}?repo_name=#{repository_name}&hook_id=#{hook.id}&installation_id=#{installation_id}", message: replacement['message']})
+      elsif hook.name == 'docker' && hook.active
+        replacement = $service_replacement_list[hook.name]
+        hook_list.push({id: hook.id, hook_name: hook.name, replacement: "#{replacement['url']}?repo_name=#{repository_name}&hook_id=#{hook.id}&installation_id=#{installation_id}", message: replacement['message']})
+      elsif hook.name != 'web'
+        puts hook.name
       end
     end
   rescue => err
@@ -216,6 +269,7 @@ post "/" do
     response = @client.find_installation_repositories_for_user(installation_id)
 
     app_token = get_app_token(installation_id)
+    return 404 unless app_token != ''
     @app_client = Octokit::Client.new(:access_token => app_token)
     @app_client.auto_paginate = true
 
@@ -235,6 +289,34 @@ post "/" do
     return json :error_message => err
   end
   json result
+end
+
+get "/replace_jenkins" do
+  installation_id = params[:installation_id]
+  repo_name = params[:repo_name]
+  hook_id = params[:hook_id]
+  replace_hook(installation_id, repo_name, hook_id)
+end
+
+# Remove and generalize
+get "/replace_codereviewhub" do
+  installation_id = params[:installation_id]
+  repo_name = params[:repo_name]
+  hook_id = params[:hook_id]
+  replace_hook(installation_id, repo_name, hook_id)
+
+  # Success
+  redirect "/"  
+end
+
+get "/replace_docker" do
+  installation_id = params[:installation_id]
+  repo_name = params[:repo_name]
+  hook_id = params[:hook_id]
+  replace_hook(installation_id, repo_name, hook_id)
+  
+  # Success
+  redirect "/"
 end
 
 # Handle the redirect from GitHub after someone authorises the app.
